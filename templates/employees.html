@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Employees - Attendance System{% endblock %}
+
+{% block content %}
+<h2>Employee Management</h2>
+
+<div id="alert" style="display: none;" class="alert"></div>
+
+<div style="margin: 30px 0;">
+    <button class="btn" onclick="openAddEmployeeModal()">+ Add New Employee</button>
+</div>
+
+<div id="addEmployeeModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAddEmployeeModal()">&times;</span>
+        <h3>Add New Employee</h3>
+        
+        <form id="addEmployeeForm">
+            <div class="form-group">
+                <label for="name">Full Name *</label>
+                <input type="text" id="name" name="name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="employeeId">Employee ID *</label>
+                <input type="text" id="employeeId" name="employee_id" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email">
+            </div>
+            
+            <div class="form-group">
+                <label for="department">Department</label>
+                <input type="text" id="department" name="department">
+            </div>
+            
+            <button type="submit" class="btn">Add Employee</button>
+            <button type="button" class="btn btn-secondary" onclick="closeAddEmployeeModal()">Cancel</button>
+        </form>
+    </div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Employee ID</th>
+            <th>Email</th>
+            <th>Department</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for employee in employees %}
+        <tr>
+            <td>{{ employee[2] }}</td>
+            <td>{{ employee[1] }}</td>
+            <td>{{ employee[3] or 'N/A' }}</td>
+            <td>{{ employee[4] or 'N/A' }}</td>
+            <td>
+                <button class="btn btn-success" onclick="enrollFace('{{ employee[1] }}', '{{ employee[2] }}')">
+                    Enroll Face
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if not employees %}
+<div style="text-align: center; padding: 40px; color: #999;">
+    <p>No employees yet. Add one to get started!</p>
+</div>
+{% endif %}
+
+<script>
+function openAddEmployeeModal() {
+    document.getElementById('addEmployeeModal').style.display = 'block';
+}
+
+function closeAddEmployeeModal() {
+    document.getElementById('addEmployeeModal').style.display = 'none';
+    document.getElementById('addEmployeeForm').reset();
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('addEmployeeModal');
+    if (event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+
+document.getElementById('addEmployeeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        name: document.getElementById('name').value,
+        employee_id: document.getElementById('employeeId').value,
+        email: document.getElementById('email').value,
+        department: document.getElementById('department').value
+    };
+    
+    const alert = document.getElementById('alert');
+    
+    fetch('/api/add-employee', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert.style.display = 'block';
+        if (data.status === 'success') {
+            alert.className = 'alert alert-success';
+            alert.textContent = '✓ Employee added successfully! Reload to see changes.';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert.className = 'alert alert-error';
+            alert.textContent = '✗ Error: ' + data.message;
+        }
+        closeAddEmployeeModal();
+    })
+    .catch(error => {
+        alert.style.display = 'block';
+        alert.className = 'alert alert-error';
+        alert.textContent = '✗ Error adding employee: ' + error;
+    });
+});
+
+function enrollFace(employeeId, employeeName) {
+    if (confirm(`Enroll facial data for ${employeeName}? Make sure your camera is connected.`)) {
+        const alert = document.getElementById('alert');
+        alert.style.display = 'block';
+        alert.className = 'alert alert-success';
+        alert.textContent = '🔄 Starting face enrollment... A camera window will open.';
+        
+        fetch(`/api/enroll-face/${employeeId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert.textContent = '✓ Face enrollment started! Check your camera window.';
+            } else {
+                alert.className = 'alert alert-error';
+                alert.textContent = '✗ Error: ' + data.message;
+            }
+        })
+        .catch(error => {
+            alert.className = 'alert alert-error';
+            alert.textContent = '✗ Error enrolling face: ' + error;
+        });
+    }
+}
+</script>
+{% endblock %}

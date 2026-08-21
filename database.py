@@ -21,17 +21,6 @@ def init_database():
         )
     ''')
     
-    # Create face encodings table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS face_encodings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            employee_id TEXT NOT NULL,
-            encoding BLOB NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
-        )
-    ''')
-    
     # Create attendance records table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS attendance (
@@ -75,29 +64,6 @@ def get_employee(employee_id):
     conn.close()
     
     return employee
-
-def add_face_encoding(employee_id, encoding):
-    """Store face encoding for an employee"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        INSERT INTO face_encodings (employee_id, encoding)
-        VALUES (?, ?)
-    ''', (employee_id, encoding))
-    conn.commit()
-    conn.close()
-
-def get_face_encoding(employee_id):
-    """Retrieve face encoding for an employee"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('SELECT encoding FROM face_encodings WHERE employee_id = ?', (employee_id,))
-    result = cursor.fetchone()
-    conn.close()
-    
-    return result[0] if result else None
 
 def record_attendance(employee_id, check_in=True):
     """Record attendance check-in or check-out"""

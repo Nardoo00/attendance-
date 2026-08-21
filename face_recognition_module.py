@@ -1,27 +1,59 @@
 import cv2
-import face_recognition
 import numpy as np
-import pickle
-from database import get_face_encoding, add_face_encoding, record_attendance, get_employee
+from database import record_attendance, get_employee, get_all_employees
 from datetime import datetime
+import pickle
+import os
 
 class FacialRecognitionSystem:
     def __init__(self):
+        # Use pre-trained Haar Cascade classifier for face detection
         self.face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
-        self.known_face_encodings = []
+        self.recognizer = cv2.face.LBPHFaceRecognizer_create()
         self.known_face_names = []
-        self.tolerance = 0.6
+        self.model_path = 'face_model.yml'
+        self.labels_path = 'face_labels.pkl'
+        self.faces = []
+        self.labels = []
+        self.load_model()
         
-    def capture_face_for_enrollment(self, employee_id, num_samples=5):
-        """Capture facial images for a new employee"""
+    def load_model(self):
+        """Load the trained face recognition model"""
+        if os.path.exists(self.model_path) and os.path.exists(self.labels_path):
+            try:
+                self.recognizer.read(self.model_path)
+                with open(self.labels_path, 'rb') as f:
+                    self.known_face_names = pickle.load(f)
+                print(f"✓ Model loaded with {len(self.known_face_names)} employees")
+            except Exception as e:
+                print(f"Error loading model: {e}")
+        
+    def save_model(self):
+        """Save the trained model"""
+        try:
+            self.recognizer.write(self.model_path)
+            with open(self.labels_path, 'wb') as f:
+                pickle.dump(self.known_face_names, f)
+            print("✓ Model saved successfully")
+        except Exception as e:
+            print(f"Error saving model: {e}")
+    
+    def capture_face_for_enrollment(self, employee_id, num_samples=30):
+        """Capture facial images for a new employee using OpenCV only"""
+        employee = get_employee(employee_id)
+        if not employee:
+            print(f"Employee {employee_id} not found")
+            return False
+        
         cap = cv2.VideoCapture(0)
         captured_count = 0
-        face_encodings = []
+        faces = []
         
-        print(f"Starting face capture for employee: {employee_id}")
+        print(f"\nStarting face capture for: {employee[2]}")
         print(f"Please look at the camera. We will capture {num_samples} face samples.")
+        print("Press SPACE to capture, ESC to exit\n")
         
         while captured_count < num_samples:
             ret, frame = cap.read()
@@ -30,112 +62,126 @@ class FacialRecognitionSystem:
                 print("Failed to capture image")
                 break
             
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            face_locations = face_recognition.face_locations(rgb_frame)
-            face_encodings_list = face_recognition.face_encodings(rgb_frame, face_locations)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            detected_faces = self.face_cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.3,
+                minNeighbors=5,
+                minSize=(30, 30)
+            )
             
-            # Draw rectangles around faces
-            for (top, right, bottom, left) in face_locations:
-                cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            # Draw rectangles around detected faces
+            for (x, y, w, h) in detected_faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
             
             # Display info
-            cv2.putText(frame, f"Samples captured: {captured_count}/{num_samples}", 
+            cv2.putText(frame, f"Samples: {captured_count}/{num_samples}", 
                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(frame, "Press SPACE to capture, ESC to exit", 
+            cv2.putText(frame, "SPACE=Capture, ESC=Exit", 
                        (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
             
             cv2.imshow('Face Enrollment', frame)
             
             key = cv2.waitKey(1) & 0xFF
             if key == 32:  # SPACE key
-                if len(face_encodings_list) > 0:
-                    face_encodings.append(face_encodings_list[0])
+                if len(detected_faces) > 0:
+                    # Use the largest detected face
+                    x, y, w, h = max(detected_faces, key=lambda f: f[2]*f[3])
+                    face_roi = gray[y:y+h, x:x+w]
+                    faces.append(face_roi)
                     captured_count += 1
-                    print(f"Face sample {captured_count} captured")
+                    print(f"  ✓ Sample {captured_count} captured")
                 else:
-                    print("No face detected. Please try again.")
+                    print("  ✗ No face detected. Please try again.")
             elif key == 27:  # ESC key
                 break
         
         cap.release()
         cv2.destroyAllWindows()
         
-        if len(face_encodings) > 0:
-            # Average the encodings
-            face_encoding_avg = np.mean(face_encodings, axis=0)
-            # Store in database
-            add_face_encoding(employee_id, face_encoding_avg.tobytes())
-            print(f"Face encoding stored successfully for {employee_id}")
-            return True
+        if len(faces) > 0:
+            # Add to training data
+            emp_label = len(self.known_face_names)
+            self.known_face_names.append(employee_id)
+            
+            for face in faces:
+                self.faces.append(face)
+                self.labels.append(emp_label)
+            
+            # Train the model
+            if len(self.faces) > 0:
+                self.recognizer.train(self.faces, np.array(self.labels))
+                self.save_model()
+                print(f"\n✓ Face training completed for {employee[2]}")
+                return True
         else:
-            print("Failed to capture face samples")
+            print("✗ Failed to capture faces")
             return False
     
     def recognize_face_from_camera(self):
         """Real-time face recognition from camera"""
+        if len(self.known_face_names) == 0:
+            print("\n⚠ No faces enrolled yet. Please enroll employees first.")
+            return
+        
         cap = cv2.VideoCapture(0)
         recognized_today = set()
+        confidence_threshold = 70  # Lower is better match (0-100)
         
-        print("Starting face recognition system...")
-        print("Press 'q' to quit")
+        print("\n" + "="*50)
+        print("  Face Recognition Started")
+        print("  Press 'q' to quit")
+        print("="*50 + "\n")
         
+        frame_count = 0
         while True:
             ret, frame = cap.read()
             
             if not ret:
                 break
             
-            # Resize frame for faster processing
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            detected_faces = self.face_cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.3,
+                minNeighbors=5,
+                minSize=(30, 30)
+            )
             
-            # Find faces and encodings
-            face_locations = face_recognition.face_locations(rgb_small_frame)
-            face_encodings_list = face_recognition.face_encodings(rgb_small_frame, face_locations)
+            frame_count += 1
             
-            face_names = []
-            face_distances_list = []
-            
-            for face_encoding in face_encodings_list:
-                # Compare with database
-                match_found = False
-                employees = self._get_all_employees_with_faces()
+            for (x, y, w, h) in detected_faces:
+                face_roi = gray[y:y+h, x:x+w]
                 
-                for emp_id, stored_encoding in employees:
-                    if stored_encoding is None:
-                        continue
-                    
-                    distance = face_recognition.face_distance([stored_encoding], face_encoding)
-                    
-                    if distance[0] < self.tolerance:
-                        face_names.append(emp_id)
-                        face_distances_list.append(distance[0])
-                        match_found = True
+                # Only recognize every 5 frames to reduce processing
+                if frame_count % 5 == 0:
+                    try:
+                        label, confidence = self.recognizer.predict(face_roi)
                         
-                        # Record attendance
-                        if emp_id not in recognized_today:
-                            record_attendance(emp_id, check_in=True)
-                            recognized_today.add(emp_id)
+                        if confidence < confidence_threshold and label < len(self.known_face_names):
+                            emp_id = self.known_face_names[label]
                             employee = get_employee(emp_id)
-                            print(f"✓ Attendance recorded for: {employee[2]} ({emp_id})")
-                        break
+                            name = employee[2] if employee else "Unknown"
+                            color = (0, 255, 0)  # Green
+                            
+                            # Record attendance
+                            if emp_id not in recognized_today:
+                                record_attendance(emp_id, check_in=True)
+                                recognized_today.add(emp_id)
+                                print(f"✓ Attendance recorded: {name} ({emp_id})")
+                        else:
+                            name = "Unknown"
+                            color = (0, 0, 255)  # Red
+                    except Exception as e:
+                        name = "Unknown"
+                        color = (0, 0, 255)
+                else:
+                    name = "Processing..."
+                    color = (255, 165, 0)  # Orange
                 
-                if not match_found:
-                    face_names.append("Unknown")
-                    face_distances_list.append(1.0)
-            
-            # Display results
-            for (top, right, bottom, left), name in zip(face_locations, face_names):
-                top *= 4
-                right *= 4
-                bottom *= 4
-                left *= 4
-                
-                color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
-                
-                cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-                cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
-                cv2.putText(frame, name, (left + 6, bottom - 6), 
+                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+                cv2.rectangle(frame, (x, y-35), (x+w, y), color, cv2.FILLED)
+                cv2.putText(frame, name, (x+6, y-10), 
                            cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
             
             cv2.imshow('Attendance System - Face Recognition', frame)
@@ -145,20 +191,6 @@ class FacialRecognitionSystem:
         
         cap.release()
         cv2.destroyAllWindows()
-    
-    def _get_all_employees_with_faces(self):
-        """Get all employees with their face encodings"""
-        from database import get_all_employees
-        
-        employees_with_faces = []
-        employees = get_all_employees()
-        
-        for employee in employees:
-            employee_id = employee[1]
-            encoding_bytes = get_face_encoding(employee_id)
-            
-            if encoding_bytes:
-                encoding = np.frombuffer(encoding_bytes, dtype=np.float64)
-                employees_with_faces.append((employee_id, encoding))
-        
-        return employees_with_faces
+        print("\n" + "="*50)
+        print("  Recognition stopped")
+        print("="*50 + "\n")

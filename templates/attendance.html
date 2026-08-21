@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Records - Attendance System{% endblock %}
+
+{% block content %}
+<h2>Attendance Records</h2>
+
+<div style="margin: 30px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+    <label for="startDate">From:</label>
+    <input type="date" id="startDate" value="{{ start_date }}">
+    
+    <label for="endDate" style="margin-left: 20px;">To:</label>
+    <input type="date" id="endDate" value="{{ end_date }}">
+    
+    <button class="btn" onclick="filterRecords()" style="margin-left: 20px;">Filter</button>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Employee Name</th>
+            <th>Employee ID</th>
+            <th>Date</th>
+            <th>Check-in Time</th>
+            <th>Check-out Time</th>
+            <th>Status</th>
+            <th>Duration</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in records %}
+        <tr>
+            <td>{{ record[8] }}</td>
+            <td>{{ record[1] }}</td>
+            <td>{{ record[6] }}</td>
+            <td>{{ record[2] or 'N/A' }}</td>
+            <td>{{ record[3] or 'N/A' }}</td>
+            <td>
+                <span style="padding: 5px 10px; border-radius: 5px; background: {% if record[5] == 'present' %}#d4edda; color: #155724;{% else %}#f8d7da; color: #721c24;{% endif %}">
+                    {{ record[5] }}
+                </span>
+            </td>
+            <td>
+                {% if record[3] and record[2] %}
+                    In Progress
+                {% else %}
+                    N/A
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if not records %}
+<div style="text-align: center; padding: 40px; color: #999;">
+    <p>No attendance records found for the selected date range.</p>
+</div>
+{% endif %}
+
+<div style="margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #333; margin-bottom: 15px;">📊 Summary</h3>
+    <p><strong>Total Records:</strong> {{ records|length }}</p>
+    <p><strong>Total Present:</strong> {{ records|selectattr('5', 'equalto', 'present')|list|length }}</p>
+    <p><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</p>
+</div>
+
+<script>
+function filterRecords() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (startDate && endDate) {
+        window.location.href = `/attendance?start_date=${startDate}&end_date=${endDate}`;
+    } else {
+        alert('Please select both dates');
+    }
+}
+</script>
+{% endblock %}

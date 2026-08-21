@@ -61,9 +61,7 @@
             <td>{{ employee[3] or 'N/A' }}</td>
             <td>{{ employee[4] or 'N/A' }}</td>
             <td>
-                <button class="btn btn-success" onclick="enrollFace('{{ employee[1] }}', '{{ employee[2] }}')">
-                    Enroll Face
-                </button>
+                <button class="btn btn-success" onclick="enrollFace('{{ employee[1] }}', '{{ employee[2] }}')">Enroll Face</button>
             </td>
         </tr>
         {% endfor %}

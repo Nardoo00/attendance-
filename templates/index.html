@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Attendance System{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 40px 0;">
+    <h2 style="color: #333; margin-bottom: 30px;">Welcome to Attendance System</h2>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; color: white;">
+            <h3 style="margin-bottom: 15px; font-size: 1.5em;">🚀 Start Recognition</h3>
+            <p style="margin-bottom: 20px;">Begin real-time facial recognition for attendance tracking</p>
+            <button class="btn" onclick="startRecognition()" style="width: 100%; background: white; color: #667eea;">Start Now</button>
+        </div>
+        
+        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 30px; border-radius: 10px; color: white;">
+            <h3 style="margin-bottom: 15px; font-size: 1.5em;">📊 View Records</h3>
+            <p style="margin-bottom: 20px;">Check attendance records and generate reports</p>
+            <a href="/attendance" class="btn" style="width: 100%; background: white; color: #f5576c; text-align: center;">View Records</a>
+        </div>
+        
+        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 30px; border-radius: 10px; color: white;">
+            <h3 style="margin-bottom: 15px; font-size: 1.5em;">👥 Manage Employees</h3>
+            <p style="margin-bottom: 20px;">Add employees and enroll their facial data</p>
+            <a href="/employees" class="btn" style="width: 100%; background: white; color: #4facfe; text-align: center;">Manage</a>
+        </div>
+    </div>
+    
+    <div style="margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 10px; text-align: left;">
+        <h3 style="color: #333; margin-bottom: 15px;">📋 System Information</h3>
+        <p><strong>Total Employees:</strong> {{ employees|length }}</p>
+        <p><strong>Features:</strong></p>
+        <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+            <li>✓ Real-time facial recognition</li>
+            <li>✓ Automatic attendance recording</li>
+            <li>✓ SQLite database integration</li>
+            <li>✓ Attendance reports and analytics</li>
+            <li>✓ Multi-employee support</li>
+        </ul>
+    </div>
+</div>
+
+<div id="statusAlert" style="display: none; margin-top: 20px;" class="alert"></div>
+
+<script>
+function startRecognition() {
+    const alert = document.getElementById('statusAlert');
+    alert.style.display = 'block';
+    alert.className = 'alert alert-success';
+    alert.textContent = '🔄 Starting face recognition... Make sure your camera is connected!';
+    
+    fetch('/api/start-recognition', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert.textContent = '✓ Face recognition has started. Check your camera window!';
+        } else {
+            alert.className = 'alert alert-error';
+            alert.textContent = '✗ Error: ' + data.message;
+        }
+    })
+    .catch(error => {
+        alert.className = 'alert alert-error';
+        alert.textContent = '✗ Error starting recognition: ' + error;
+    });
+}
+</script>
+{% endblock %}
